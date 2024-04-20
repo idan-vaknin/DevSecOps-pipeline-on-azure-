@@ -29,7 +29,7 @@ resource "azurerm_app_service" "web" {
     linux_fx_version = "DOCKER|nginx:latest"
     
     app_settings = {
-      WEBSITES_PORT = "80"
+      WEBSITES_PORT = "443"
     }
 
     https_only = true
