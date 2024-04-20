@@ -1,0 +1,92 @@
+trigger:
+- main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - group: devsecops_credentials  # Add your Azure DevOps variable group name here
+
+stages:
+- stage: Terraform_Initialize
+  jobs:
+  - job: Terraform_Initialize
+    displayName: 'Terraform Init'
+    steps:
+    - checkout: self
+      persistCredentials: true
+
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '3.x'
+
+    - task: TerraformInstaller@0
+      inputs:
+        terraformVersion: 'latest'
+
+    - task: TerraformTaskV2@2
+      inputs:
+        provider: 'azurerm'
+        command: 'init'
+        backendServiceArm: '$(azureSubscriptionEndpoint)'
+        backendAzureRmResourceGroupName: 'webapp-rg'
+        backendAzureRmStorageAccountName: 'devsecopsstore'
+        backendAzureRmContainerName: 'tfstate'
+        backendAzureRmKey: 'terraform.tfstate'
+
+- stage: Terraform_Plan
+  jobs:
+  - job: Terraform_Plan
+    displayName: 'Terraform Plan'
+    dependsOn: Terraform_Initialize
+    steps:
+    - checkout: self
+      persistCredentials: true
+
+    - task: TerraformTaskV2@2
+      inputs:
+        provider: 'azurerm'
+        command: 'plan'
+        workingDirectory: './iac'
+        environmentServiceNameAzureRM: '$(azureSubscriptionEndpoint)'
+        backendServiceArm: '$(azureSubscriptionEndpoint)'
+        backendAzureRmResourceGroupName: 'webapp-rg'
+        backendAzureRmStorageAccountName: 'devsecopsstore'
+        backendAzureRmContainerName: 'tfstate'
+        backendAzureRmKey: 'terraform.tfstate'
+
+- stage: Trivi_Scan
+  displayName: 'Trivi Scan'
+  jobs:
+  - job: Trivi_Scan
+    displayName: 'Trivi Scan'
+    steps:
+    - checkout: self
+      persistCredentials: true
+
+    - task: Bash@3
+      inputs:
+        filePath: 'iac/trivi_scan.sh'
+        arguments: 'nginx:latest'
+
+- stage: Terraform_Deploy
+  jobs:
+  - job: Terraform_Deploy
+    displayName: 'Terraform Apply'
+    dependsOn: Terraform_Plan
+    steps:
+    - checkout: self
+      persistCredentials: true
+
+    - task: TerraformTaskV1@0
+      inputs:
+        provider: 'azurerm'
+        command: 'apply'
+        workingDirectory: './iac'
+        environmentServiceNameAzureRM: '$(azureSubscriptionEndpoint)'
+        backendServiceArm: '$(azureSubscriptionEndpoint)'
+        backendAzureRmResourceGroupName: 'webapp-rg'
+        backendAzureRmStorageAccountName: 'devsecopsstore'
+        backendAzureRmContainerName: 'tfstate'
+        backendAzureRmKey: 'terraform.tfstate'
+        commandOptions: '-auto-approve'
